@@ -1,13 +1,13 @@
 import streamlit as st
-import requests, json, os
+import requests
 import pandas as pd
+import json, os
 from datetime import datetime
-
 
 # ================= BASIC CONFIG =================
 st.set_page_config(page_title="World Class Futures Scanner", layout="wide")
 
-# ================= SECRETS =================
+# ================= SECRETS (Streamlit Cloud) =================
 APP_PASSWORD = st.secrets["APP_PASSWORD"]
 TG_TOKEN = st.secrets["TG_TOKEN"]
 TG_CHAT_ID = st.secrets["TG_CHAT_ID"]
@@ -22,13 +22,14 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    pwd = st.text_input("🔐 Enter Password", type="password")
-    if st.button("LOGIN"):
+    st.markdown("## 🔐 Login Required")
+    pwd = st.text_input("Enter Password", type="password")
+    if st.button("LOGIN", use_container_width=True):
         if pwd == APP_PASSWORD:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Wrong password")
+            st.error("❌ Wrong password")
     st.stop()
 
 # ================= FILE HELPERS =================
@@ -36,7 +37,8 @@ def load_json(path, default):
     if not os.path.exists(path):
         return default
     try:
-        return json.load(open(path))
+        with open(path, "r") as f:
+            return json.load(f)
     except:
         return default
 
@@ -48,7 +50,11 @@ def save_json(path, data):
 def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id": TG_CHAT_ID, "text": msg}, timeout=5)
+        requests.post(
+            url,
+            json={"chat_id": TG_CHAT_ID, "text": msg},
+            timeout=5
+        )
     except:
         pass
 
@@ -98,19 +104,20 @@ def find_trade(df, oi_prev):
         if oi_delta <= 0:
             continue
 
-        # 🟡 BUILDING PHASE (alert once)
+        # 🟡 BUILDING PHASE ALERT (once)
         if abs(r["Change"]) < 0.05:
             key = f"build_{r['Symbol']}"
             if not st.session_state.get(key):
-                send_telegram(f"🟡 BUILDING PHASE\n{r['Symbol']}")
+                send_telegram(
+                    f"🟡 BUILDING PHASE\n{r['Symbol']}\nOI building, price flat"
+                )
                 st.session_state[key] = True
             continue
 
-        if r["Change"] > 0:
-            direction = "LONG"
-        else:
-            direction = "SHORT"
+        # Direction
+        direction = "LONG" if r["Change"] > 0 else "SHORT"
 
+        # Funding filter
         if direction == "LONG" and r["Funding"] > 0.01:
             continue
         if direction == "SHORT" and r["Funding"] < -0.01:
@@ -133,12 +140,11 @@ def find_trade(df, oi_prev):
 
     return best
 
-# ================= AUTO REFRESH =================
-st.autorefresh(interval=AUTO_SCAN_SECONDS * 1000, key="scan")
-
+# ================= AUTO REFRESH (FIXED ✅) =================
+st.autorefresh(interval=AUTO_SCAN_SECONDS * 1000, key="autoscan")
 
 # ================= UI =================
-st.title("🚀 World Class Futures Scanner")
+st.markdown("## 🚀 World Class Futures Scanner")
 
 trades = load_json(DATA_FILE, [])
 oi_prev = load_json(OI_FILE, {})
@@ -146,12 +152,12 @@ oi_prev = load_json(OI_FILE, {})
 df = prepare_df(fetch_data())
 price_map = dict(zip(df["Symbol"], df["Price"]))
 
-# TP HIT ALERT
+# ================= STATUS UPDATE =================
 for t in trades:
     if t["Status"] == "RUNNING" and t["Symbol"] in price_map:
         price = price_map[t["Symbol"]]
-        tp1, tp2 = float(t["TP1"]), float(t["TP2"])
         old = t["Status"]
+        tp1, tp2 = float(t["TP1"]), float(t["TP2"])
 
         if t["Direction"] == "LONG":
             if price >= tp2:
@@ -165,7 +171,9 @@ for t in trades:
                 t["Status"] = "TP1 HIT"
 
         if old != t["Status"]:
-            send_telegram(f"🛑 {t['Status']}\n{t['Symbol']}")
+            send_telegram(
+                f"🛑 {t['Status']}\n{t['Symbol']}\nEntry: {t['Entry']}"
+            )
 
 save_json(DATA_FILE, trades)
 save_json(OI_FILE, dict(zip(df["Symbol"], df["OI"])))
@@ -178,8 +186,12 @@ if trade:
     trades.insert(0, trade)
     save_json(DATA_FILE, trades)
     send_telegram(
-        f"🔥 MOTA PAISA TRADE\n{trade['Symbol']}\n{trade['Direction']}\nEntry: {trade['Entry']}"
+        f"🔥 MOTA PAISA TRADE\n"
+        f"{trade['Symbol']}\n"
+        f"{trade['Direction']}\n"
+        f"Entry: {trade['Entry']}"
     )
 
+# ================= HISTORY =================
+st.subheader("📜 Trade History")
 st.dataframe(pd.DataFrame(trades), use_container_width=True)
-
