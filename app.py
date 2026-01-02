@@ -2,7 +2,7 @@ import streamlit as st
 import requests, json, os
 import pandas as pd
 from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
+
 
 # ================= BASIC CONFIG =================
 st.set_page_config(page_title="World Class Futures Scanner", layout="wide")
@@ -134,7 +134,8 @@ def find_trade(df, oi_prev):
     return best
 
 # ================= AUTO REFRESH =================
-st_autorefresh(interval=AUTO_SCAN_SECONDS * 1000, key="scan")
+st.autorefresh(interval=AUTO_SCAN_SECONDS * 1000, key="scan")
+
 
 # ================= UI =================
 st.title("🚀 World Class Futures Scanner")
@@ -181,3 +182,4 @@ if trade:
     )
 
 st.dataframe(pd.DataFrame(trades), use_container_width=True)
+
