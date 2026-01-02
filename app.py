@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-import json, os
+import json, os, time
 from datetime import datetime
 
 # ================= BASIC CONFIG =================
@@ -31,6 +31,14 @@ if not st.session_state.auth:
         else:
             st.error("❌ Wrong password")
     st.stop()
+
+# ================= AUTO SCAN TIMER (SAFE) =================
+if "last_run" not in st.session_state:
+    st.session_state.last_run = time.time()
+
+if time.time() - st.session_state.last_run > AUTO_SCAN_SECONDS:
+    st.session_state.last_run = time.time()
+    st.experimental_rerun()
 
 # ================= FILE HELPERS =================
 def load_json(path, default):
@@ -104,7 +112,7 @@ def find_trade(df, oi_prev):
         if oi_delta <= 0:
             continue
 
-        # 🟡 BUILDING PHASE ALERT (once)
+        # 🟡 BUILDING PHASE (alert once per symbol)
         if abs(r["Change"]) < 0.05:
             key = f"build_{r['Symbol']}"
             if not st.session_state.get(key):
@@ -139,9 +147,6 @@ def find_trade(df, oi_prev):
             best_score = score
 
     return best
-
-# ================= AUTO REFRESH (FIXED ✅) =================
-st.autorefresh(interval=AUTO_SCAN_SECONDS * 1000, key="autoscan")
 
 # ================= UI =================
 st.markdown("## 🚀 World Class Futures Scanner")
